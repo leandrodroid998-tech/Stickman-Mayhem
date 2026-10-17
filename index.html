@@ -5685,23 +5685,27 @@ function fatEligible(w) {
   if (cfg.mode === 'duel_cpu' && !w.human) return false;       // contra a CPU: só se o jogador venceu
   return true;
 }
-function endOrFatality(w) { if (fatEligible(w)) showVictory(w); else finishMatch(); }
+function endOrFatality(w) { if (fatEligible(w)) beginFatality(w); else finishMatch(); }
 const fatEq = f => f.slot === 1 ? save.eq2 : save.eq;
 function fatIdOf(f) { const id = fatEq(f).fat; return FATS[id] && owned('fat', id) ? id : 'iron'; }
-function showVictory(w) {
-  const sr = app.series, m = app.scene, cfg = app.game.cfg, loser = m.fighters.find(f => f !== w), local = cfg.mode === 'duel_local';
-  app.vic = {winner: w, loser, match: m, used: false, local};
+// Fatality automática: ao vencer a partida inteira, a finalização roda sozinha (sem botão); depois vem a tela de vitória
+function beginFatality(w) {
+  const m = app.scene, cfg = app.game.cfg, loser = m.fighters.find(f => f !== w);
+  app.vic = {winner: w, loser, match: m, used: false, local: false};
   app.state = 'victory'; Controls.reset(); $('#hud').classList.add('hidden'); $('#ctrl').classList.add('hidden'); clearInterval(roundTimer);
+  startFatality();
+}
+function showVictory() {   // pós-Fatality: tela de vitória com resultado / nova partida / menu
+  const V = app.vic, w = V.winner, sr = app.series, cfg = app.game.cfg, local = cfg.mode === 'duel_local', F = FATS[V.fatId];
+  V.post = true; V.local = false; app.state = 'victory';
   $('#vic-title').textContent = local ? w.name + ' VENCEU!' : 'VITÓRIA!';
   $('#vic-sub').textContent = 'PARTIDA VENCIDA' + (sr.rounds ? ' · ' + sr.score[0] + ' : ' + sr.score[1] : '');
-  const id = fatIdOf(w), F = FATS[id];
-  $('#vic-eq').innerHTML = ico('skull') + ' <span>Fatality equipada:</span> <b style="color:' + F.c + '">' + F.name + '</b>';
-  const k = save.keys[w.slot === 1 ? 'p2' : 'p1'];
-  $('#vic-hint').textContent = local ? 'Somente ' + w.name + ' executa: toque deste lado · tecla ' + keyName(k.atk) + ' · botão A do controle' : '';
-  const box = $('#s-victory'); box.classList.toggle('local', local); box.classList.toggle('side-r', local && w.slot === 1);
-  const b = $('#vic-fat'); b.classList.remove('hit'); b.style.animation = 'none'; void b.offsetWidth; b.style.animation = '';
+  $('#vic-fat').classList.add('hidden'); $('#vic-hint').textContent = '';
+  $('#vic-eq').innerHTML = ico('skull') + ' <span>Fatality:</span> <b style="color:' + F.c + '">' + F.name + '</b>';
+  $('#vic-skip span').textContent = 'VER RESULTADO';
+  const box = $('#s-victory'); box.classList.remove('local', 'side-r');
   const t = $('#vic-title'); t.style.animation = 'none'; void t.offsetWidth; t.style.animation = '';
-  showScreen('victory'); SFX.duck(false); SFX.play('fat_stamp');
+  showScreen('victory'); SFX.duck(false); SFX.play('fat_win');
 }
 function fatAllowed(e) {   // duelo local: só o vencedor aciona (lado da tela dele, ou as teclas/controle dele)
   const V = app.vic; if (!V) return false; if (!V.local) return true;
@@ -5719,13 +5723,7 @@ function startFatality() {
   V.fatId = id; V.fatMatch = m; app.scene = m; app.state = 'fatality'; app.acc = 0; app.fatWait = 0;
   Controls.reset(); showScreen(null); SFX.duck(true); save.stats.fatalities = (save.stats.fatalities || 0) + 1; persist(); buzz(30);
 }
-function showFatEnd() {
-  const V = app.vic; if (!V || app.state !== 'fatality') return;
-  app.state = 'fatend'; SFX.duck(false); SFX.play('fat_win');
-  const F = FATS[V.fatId]; $('#fe-name').textContent = F.name; $('#fe-name').style.color = F.c; $('#fe-sub').textContent = V.winner.name + ' · ' + (V.local ? 'VENCEDOR' : 'VITÓRIA');
-  const t = $('#s-fatend .panel'); t.style.animation = 'none'; void t.offsetWidth; t.style.animation = '';
-  showScreen('fatend');
-}
+function showFatEnd() { if (!app.vic || app.state !== 'fatality') return; showVictory(); }
 function closeVictory() { const V = app.vic; if (V) { app.scene = V.match; V.fatMatch = null; } app.vic = null; }
 function skipFatality() { if (app.state !== 'victory' || !app.vic) return; closeVictory(); finishMatch(); }
 $('#vic-fat').addEventListener('pointerdown', e => { if (app.state === 'victory') { $('#vic-fat').classList.add('hit'); buzz(25); SFX.resume(); SFX.play('fat_button'); } });
